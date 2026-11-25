@@ -1,0 +1,8 @@
+# PlatformIO build output and downloaded dependencies
+.pio/
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp

@@ -1,0 +1,2 @@
+# Store text with LF in the repository so macOS / Linux / Windows checkouts agree
+* text=auto
