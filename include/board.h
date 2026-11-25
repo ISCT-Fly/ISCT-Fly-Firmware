@@ -90,6 +90,8 @@ float adc_mcu_temp(float vdda);
 
 void servo_set_us(int idx, uint16_t us); /* idx 0..2, us = 0 stops the pulse train */
 void motor_set_permille(uint16_t pm);    /* 0..1000 */
+uint16_t servo_get_us(int idx);          /* what the timer is really outputting */
+uint16_t motor_get_permille(void);
 int16_t enc_count(void);
 
 #endif /* BOARD_H */

@@ -169,6 +169,12 @@ static bool tof_present(void)
     return HAL_I2C_IsDeviceReady(&hi2c1, VL53L1X_ADDR << 1, 2, 5) == HAL_OK;
 }
 
+bool tof_online(void)
+{
+    uint8_t id[2] = {0, 0};
+    return tof_rd(0x010F, id, 2) && id[0] == 0xEA && id[1] == 0xCC;
+}
+
 void test_tof(void)
 {
     uint8_t id[2] = {0, 0};

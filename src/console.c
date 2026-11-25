@@ -14,6 +14,7 @@ static volatile uint16_t rx_head, rx_tail;
 static char cap[CAP_SIZE];
 static size_t cap_len;
 static bool cap_on;
+static bool echo_on = true;
 
 void con_init(void)
 {
@@ -139,6 +140,23 @@ void con_capture(bool on)
     cap_on = on;
 }
 
+void con_set_echo(bool on)
+{
+    echo_on = on;
+}
+
+bool con_echo(void)
+{
+    return echo_on;
+}
+
+void con_prompt(void)
+{
+    if (echo_on) {
+        raw_write("> ", 2);
+    }
+}
+
 void con_replay(void)
 {
     bool was = cap_on;
@@ -161,7 +179,9 @@ const char *con_readline(void)
         }
         last_cr = (c == '\r');
         if (c == '\r' || c == '\n') {
-            raw_write("\r\n", 2);
+            if (echo_on) {
+                raw_write("\r\n", 2);
+            }
             line[len] = '\0';
             len = 0;
             return line;
@@ -169,12 +189,16 @@ const char *con_readline(void)
         if (c == 0x08 || c == 0x7F) {
             if (len > 0) {
                 len--;
-                raw_write("\b \b", 3);
+                if (echo_on) {
+                    raw_write("\b \b", 3);
+                }
             }
         } else if (c >= 0x20 && c < 0x7F && len < sizeof(line) - 1) {
             line[len++] = (char)c;
-            char ch = (char)c;
-            raw_write(&ch, 1);
+            if (echo_on) {
+                char ch = (char)c;
+                raw_write(&ch, 1);
+            }
         }
     }
     return NULL;

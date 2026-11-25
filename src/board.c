@@ -418,6 +418,22 @@ void motor_set_permille(uint16_t pm)
     __HAL_TIM_SET_COMPARE(&htim_motor, TIM_CHANNEL_1, (arr + 1U) * pm / 1000U);
 }
 
+uint16_t servo_get_us(int idx)
+{
+    static const uint32_t ch[SERVO_COUNT] = {TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3};
+    if (idx < 0 || idx >= SERVO_COUNT) {
+        return 0;
+    }
+    return (uint16_t)__HAL_TIM_GET_COMPARE(&htim_servo, ch[idx]);
+}
+
+uint16_t motor_get_permille(void)
+{
+    uint32_t arr = __HAL_TIM_GET_AUTORELOAD(&htim_motor);
+    uint32_t ccr = __HAL_TIM_GET_COMPARE(&htim_motor, TIM_CHANNEL_1);
+    return (uint16_t)((ccr * 1000U + arr / 2U) / (arr + 1U));
+}
+
 int16_t enc_count(void)
 {
     return (int16_t)__HAL_TIM_GET_COUNTER(&htim_enc);

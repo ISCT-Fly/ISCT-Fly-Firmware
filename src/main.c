@@ -70,24 +70,34 @@ int main(void)
     con_capture(true);
     selftest_run();
     con_capture(false);
-    P("> ");
+    con_prompt();
 
     uint32_t beat = HAL_GetTick();
     for (;;) {
         cdc_poll();
+        telem_poll();
+        act_poll();
 
         /* A terminal opened the USB port after the test already ran: show it the report. */
         if (cdc_take_open_event()) {
             HAL_Delay(150);
             banner();
             con_replay();
-            P("> ");
+            con_prompt();
+        }
+
+        /* The host went away (port closed, cable pulled): back to the plain interactive state
+         * and, above all, no motor left running on its last set-point. */
+        if (cdc_take_close_event() || (telem_rate() && !usb_configured())) {
+            telem_set_rate(0);
+            con_set_echo(true);
+            act_safe_stop();
         }
 
         const char *line = con_readline();
         if (line) {
             cli_execute(line);
-            P("> ");
+            con_prompt();
             beat = HAL_GetTick();
         }
 

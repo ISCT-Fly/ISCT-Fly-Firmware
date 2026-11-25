@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlapFC 测试台</title>
+<meta name="description" content="FlapFC 飞控板网页测试台：通过 USB 实时查看传感器数据、IMU 姿态，控制电机和舵机。">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <h1>FlapFC 测试台</h1>
+    <span class="sub" id="fw-info">未连接</span>
+  </div>
+  <div class="conn">
+    <span class="dot" id="conn-dot" data-state="off" aria-hidden="true"></span>
+    <span id="conn-text">未连接</span>
+    <label class="rate">刷新率
+      <select id="rate">
+        <option value="20">20 Hz</option>
+        <option value="50" selected>50 Hz</option>
+        <option value="100">100 Hz</option>
+      </select>
+    </label>
+    <button id="btn-demo" class="btn">演示数据</button>
+    <button id="btn-connect" class="btn primary">连接板子</button>
+  </div>
+</header>
+
+<div class="notice" id="no-serial" hidden>
+  当前浏览器不支持 Web Serial，无法直接连接板子。请用电脑版 Chrome 或 Edge 打开本页；“演示数据”仍可使用。
+</div>
+
+<main>
+
+<section class="modules" aria-label="模块状态">
+  <h2 class="visually-hidden">模块状态</h2>
+  <ul id="chips" class="chips"></ul>
+  <p class="hint" id="chips-hint">模块状态来自自检结果和实时数据。连接后会自动读取上一次自检报告。</p>
+</section>
+
+<div class="grid">
+
+  <section class="card span-2" id="card-att">
+    <header><h2>IMU 姿态</h2><span class="badge" id="imu-badge" data-s="unknown">无数据</span></header>
+    <div class="att">
+      <canvas id="view3d" width="520" height="360" role="img" aria-label="板子姿态三维示意"></canvas>
+      <div class="att-side">
+        <div class="tiles">
+          <div class="tile"><span class="label">横滚 Roll</span><span class="value" id="v-roll">–</span></div>
+          <div class="tile"><span class="label">俯仰 Pitch</span><span class="value" id="v-pitch">–</span></div>
+          <div class="tile"><span class="label">航向 Yaw</span><span class="value" id="v-yaw">–</span></div>
+          <div class="tile"><span class="label">|a|</span><span class="value" id="v-anorm">–</span></div>
+          <div class="tile"><span class="label">IMU 温度</span><span class="value" id="v-imut">–</span></div>
+        </div>
+        <button class="btn" id="btn-yaw0">航向归零</button>
+        <p class="hint">坐标轴是 BMI088 芯片自身的 X/Y/Z。姿态由网页根据陀螺仪和加速度计融合得到；没有磁力计，航向会缓慢漂移。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card span-2">
+    <header><h2>加速度</h2><span class="unit">g</span></header>
+    <div class="legend" id="lg-acc"></div>
+    <div class="chart"><canvas id="ch-acc"></canvas><div class="tip" hidden></div></div>
+  </section>
+
+  <section class="card span-2">
+    <header><h2>角速度</h2><span class="unit">°/s</span></header>
+    <div class="legend" id="lg-gyro"></div>
+    <div class="chart"><canvas id="ch-gyro"></canvas><div class="tip" hidden></div></div>
+  </section>
+
+  <section class="card span-2">
+    <header><h2>气压计 BMP388</h2><span class="badge" id="baro-badge" data-s="unknown">无数据</span></header>
+    <div class="tiles row">
+      <div class="tile"><span class="label">气压</span><span class="value" id="v-press">–</span></div>
+      <div class="tile"><span class="label">温度</span><span class="value" id="v-barot">–</span></div>
+      <div class="tile"><span class="label">相对高度</span><span class="value" id="v-alt">–</span></div>
+    </div>
+    <p class="chart-title">相对高度（米，相对连接时的气压）</p>
+    <div class="chart short"><canvas id="ch-alt"></canvas><div class="tip" hidden></div></div>
+  </section>
+
+  <section class="card">
+    <header><h2>电源</h2></header>
+    <div class="tile wide"><span class="label">电池 VSYS</span><span class="value" id="v-vsys">–</span></div>
+    <div class="meter" id="bat-meter" data-level="none" role="img" aria-label="电池电压"><span></span></div>
+    <div class="meter-scale"><span>3.0 V</span><span>4.2 V</span></div>
+    <dl class="kv">
+      <dt>3V3（VDDA）</dt><dd id="v-vdda">–</dd>
+      <dt>MCU 温度</dt><dd id="v-mcut">–</dd>
+      <dt>USB 供电</dt><dd id="v-vbus">–</dd>
+      <dt>充电</dt><dd id="v-chg">–</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <header><h2>测距 VL53L1X</h2><span class="badge" id="tof-badge" data-s="unknown">无数据</span></header>
+    <p id="tof-text" class="body">–</p>
+    <p class="hint">当前固件只检查芯片是否在线（型号 ID、XSHUT 控制），尚未实现测距，所以这里没有距离读数。</p>
+  </section>
+
+  <section class="card">
+    <header><h2>编码器</h2></header>
+    <div class="tiles row">
+      <div class="tile"><span class="label">计数</span><span class="value" id="v-enc">–</span></div>
+      <div class="tile"><span class="label">速度</span><span class="value" id="v-encrate">–</span></div>
+    </div>
+    <dl class="kv">
+      <dt>A 相（PC6）</dt><dd id="v-enca">–</dd>
+      <dt>B 相（PC7）</dt><dd id="v-encb">–</dd>
+    </dl>
+    <p class="hint">转动轴，计数应随方向增减。</p>
+  </section>
+
+  <section class="card span-3">
+    <header><h2>中断线</h2></header>
+    <table class="tbl" id="irq-table">
+      <thead><tr><th>信号</th><th>引脚</th><th class="num">实测频率</th><th>预期</th><th>状态</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="card span-3" id="card-act">
+    <header><h2>执行器</h2><span class="badge" id="arm-badge" data-s="unknown">电机已上锁</span></header>
+    <div class="act">
+      <div class="motor">
+        <h3>电机</h3>
+        <p class="hint">电机直接接在电池上。解锁后拖动滑块即转；网页停止发送指令 0.6 秒后固件会自动停机并上锁（把本页切到后台也会触发）。按 Esc 可立即停止。</p>
+        <div class="row-ctl">
+          <button class="btn" id="btn-arm" disabled>解锁电机</button>
+          <button class="btn danger" id="btn-stop" disabled>停止</button>
+          <label class="cap">上限
+            <select id="motor-cap">
+              <option value="20">20%</option>
+              <option value="30" selected>30%</option>
+              <option value="50">50%</option>
+              <option value="100">100%</option>
+            </select>
+          </label>
+        </div>
+        <label class="slider">
+          <span>占空比 <strong id="motor-val">0%</strong></span>
+          <input type="range" id="motor" min="0" max="30" step="1" value="0" disabled>
+        </label>
+        <p class="readback">板子实际输出：<strong id="motor-actual">–</strong></p>
+      </div>
+      <div class="servos">
+        <h3>舵机</h3>
+        <p class="hint">舵机电源是电池电压（VSYS），只插 USB、电源开关关着时舵机没有电。</p>
+        <div id="servo-rows"></div>
+        <div class="row-ctl">
+          <button class="btn" id="btn-servo-center" disabled>全部居中</button>
+          <button class="btn" id="btn-servo-off" disabled>全部关闭</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card span-3">
+    <header><h2>自检</h2><span class="sub" id="test-summary"></span></header>
+    <div class="row-ctl" id="test-buttons">
+      <button class="btn primary" data-test="" disabled>运行全部自检</button>
+      <button class="btn" data-test="imu" disabled>IMU</button>
+      <button class="btn" data-test="baro" disabled>气压计</button>
+      <button class="btn" data-test="tof" disabled>ToF</button>
+      <button class="btn" data-test="rf" disabled>无线</button>
+      <button class="btn" data-test="sd" disabled>SD 卡</button>
+      <button class="btn" data-test="power" disabled>电源</button>
+      <button class="btn" data-cmd="sdw" disabled>SD 写入验证</button>
+    </div>
+    <p class="hint">自检期间实时数据会暂停几秒，电机会被固件强制停止。</p>
+    <table class="tbl" id="test-table">
+      <thead><tr><th>结果</th><th>项目</th><th>详情</th></tr></thead>
+      <tbody><tr class="empty"><td colspan="3">还没有自检结果</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card span-3">
+    <header><h2>无线 2.4 GHz 能量扫描</h2><button class="btn" id="btn-rfscan" disabled>开始扫描</button></header>
+    <p class="hint">nRF24L01+ 在每个信道上检测是否有强于 −64 dBm 的信号（Wi-Fi、蓝牙等）。有柱子说明接收通路和天线在工作。</p>
+    <p class="chart-title" id="rf-title">各信道检测到信号的次数</p>
+    <div class="chart short"><canvas id="ch-rf"></canvas><div class="tip" hidden></div></div>
+  </section>
+
+  <section class="card span-3">
+    <header><h2>控制台</h2><button class="btn" id="btn-clear">清空</button></header>
+    <pre id="log" class="log" aria-live="off"></pre>
+    <form id="cmd-form" class="cmd">
+      <input id="cmd" type="text" autocomplete="off" spellcheck="false" placeholder="输入命令后回车，例如 help" disabled>
+      <button class="btn" type="submit" id="btn-send" disabled>发送</button>
+    </form>
+  </section>
+
+</div>
+</main>
+
+<footer>
+  <p>配套固件见本仓库 <code>src/</code>。需要电脑版 Chrome 或 Edge（Web Serial）。数据只在浏览器和板子之间传输，不会上传。</p>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

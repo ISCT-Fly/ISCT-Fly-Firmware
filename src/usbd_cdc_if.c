@@ -14,7 +14,7 @@ static uint8_t txq[TXQ_SIZE];
 static volatile uint32_t tx_head, tx_tail;
 static uint8_t tx_pkt[TX_CHUNK];
 static uint8_t rx_pkt[CDC_DATA_FS_MAX_PACKET_SIZE];
-static volatile uint8_t tx_busy, tx_stalled, dtr, rx_seen, open_evt;
+static volatile uint8_t tx_busy, tx_stalled, dtr, rx_seen, open_evt, close_evt;
 static USBD_CDC_LineCodingTypeDef line_coding = {115200, 0, 0, 8};
 
 static bool host_listening(void)
@@ -91,6 +91,15 @@ bool cdc_take_open_event(void)
     return false;
 }
 
+bool cdc_take_close_event(void)
+{
+    if (close_evt) {
+        close_evt = 0;
+        return true;
+    }
+    return false;
+}
+
 bool usb_configured(void)
 {
     return g_usb_dev.dev_state == USBD_STATE_CONFIGURED;
@@ -119,6 +128,9 @@ static int8_t cdc_itf_init(void)
 
 static int8_t cdc_itf_deinit(void)
 {
+    if (dtr || rx_seen) {
+        close_evt = 1; /* cable pulled or host went away */
+    }
     tx_busy = 0;
     dtr = 0;
     rx_seen = 0;
@@ -153,6 +165,9 @@ static int8_t cdc_itf_control(uint8_t cmd, uint8_t *pbuf, uint16_t length)
             open_evt = 1;
         }
         if (!now) {
+            if (dtr || rx_seen) {
+                close_evt = 1;
+            }
             rx_seen = 0;
         }
         dtr = now;

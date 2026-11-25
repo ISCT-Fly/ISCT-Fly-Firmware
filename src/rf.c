@@ -110,7 +110,14 @@ void rf_scan(int reps, bool print)
             best_ch = ch;
         }
     }
-    if (print) {
+    if (print && !con_echo()) {
+        /* machine mode (web test bench): one JSON line instead of the text histogram */
+        P("{\"k\":\"rfscan\",\"reps\":%d,\"hits\":[", reps);
+        for (int ch = 0; ch < 126; ch++) {
+            P(ch ? ",%u" : "%u", hits[ch]);
+        }
+        P("]}\n");
+    } else if (print) {
         char row[127];
         for (int ch = 0; ch < 126; ch++) {
             unsigned h = hits[ch];

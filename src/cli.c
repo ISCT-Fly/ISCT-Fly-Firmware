@@ -21,9 +21,58 @@ static void cmd_help(void)
     P("  sweep             all servos 1500 -> 1000 -> 2000 -> 1500, then off\n");
     P("  motor <1..100> [ms]   duty in %%, default 1000 ms, max %d ms, any key stops\n", MOTOR_MAX_MS);
     P("  led               walk green / blue / red\n");
+    P("Web test bench / scripting (USB port)\n");
+    P("  stream <hz>       JSON telemetry lines, 1..100 per second, 0 = off\n");
+    P("  echo <on|off>     off = no character echo and no prompt\n");
+    P("  info              firmware and board identification as JSON\n");
+    P("  arm | disarm      allow / forbid live motor set-points\n");
+    P("  M <0..1000>       live motor duty in permille; resend within %u ms or it stops\n", ACT_TIMEOUT_MS);
+    P("  S <1|2|3> <us>    servo pulse width, 0 = off (no reply)\n");
     P("System\n");
     P("  dfu               reboot into the USB bootloader for flashing\n");
     P("  reboot\n");
+}
+
+/* Commands sent many times per second by a host program: no reply unless something is wrong. */
+static bool cmd_machine(int argc, char **argv)
+{
+    const char *c = argv[0];
+
+    if (!strcmp(c, "M")) {
+        if (argc < 2 || !act_motor_live(atoi(argv[1]))) {
+            P("M ignored: %s\n", argc < 2 ? "missing value" : "not armed");
+        }
+    } else if (!strcmp(c, "S")) {
+        int n = argc >= 3 ? atoi(argv[1]) : 0;
+        int us = argc >= 3 ? atoi(argv[2]) : -1;
+        if (n < 1 || n > SERVO_COUNT || (us != 0 && (us < 500 || us > 2500))) {
+            P("S ignored: usage S <1..%d> <500..2500 | 0>\n", SERVO_COUNT);
+        } else {
+            servo_set_us(n - 1, (uint16_t)us);
+        }
+    } else if (!strcmp(c, "arm")) {
+        act_arm(true);
+        P("armed: motor accepts M set-points\n");
+    } else if (!strcmp(c, "disarm")) {
+        act_arm(false);
+        P("disarmed, motor off\n");
+    } else if (!strcmp(c, "stream")) {
+        telem_set_rate(argc >= 2 ? atoi(argv[1]) : 0);
+        if (con_echo()) {
+            P("stream %d Hz (USB port only)\n", telem_rate());
+        }
+    } else if (!strcmp(c, "echo")) {
+        con_set_echo(!(argc >= 2 && !strcmp(argv[1], "off")));
+    } else if (!strcmp(c, "info")) {
+        const uint32_t *uid = (const uint32_t *)UID_BASE;
+        P("{\"k\":\"hello\",\"fw\":\"%s\",\"name\":\"%s\",\"board\":\"FlapFC 30x30\",\"mcu\":\"STM32F446RET6\","
+          "\"uid\":\"%08lX%08lX%08lX\",\"hse\":%d,\"servos\":%d}\n",
+          FW_VERSION, FW_NAME, (unsigned long)uid[0], (unsigned long)uid[1], (unsigned long)uid[2], g_hse_ok,
+          SERVO_COUNT);
+    } else {
+        return false;
+    }
+    return true;
 }
 
 static void wait_ms_or_key(uint32_t ms, bool *stopped)
@@ -197,6 +246,13 @@ void cli_execute(const char *line)
         return;
     }
     const char *c = argv[0];
+
+    if (cmd_machine(argc, argv)) {
+        return;
+    }
+    /* Everything below can take a while or is typed by a person: never leave a live motor
+     * set-point running underneath it. */
+    act_safe_stop();
 
     if (!strcmp(c, "help") || !strcmp(c, "?")) {
         cmd_help();
